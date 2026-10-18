@@ -1,0 +1,83 @@
+name: tracecause
+
+# Defaults below are for local development only; override them in .env (see .env.example).
+x-db-env: &db-env
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-tracecause}
+  SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-tracecause}
+  SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-tracecause}
+
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_METRICS_EXPORTER: none
+  OTEL_LOGS_EXPORTER: none
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tracecause}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tracecause}
+      POSTGRES_DB: ${POSTGRES_DB:-tracecause}
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.22.0
+    ports:
+      - "16686:16686"
+
+  collector:
+    image: otel/opentelemetry-collector:0.163.1
+    command: ["--config=/etc/otelcol/tracecause.yaml"]
+    volumes:
+      - ./collector/config.yaml:/etc/otelcol/tracecause.yaml:ro
+    depends_on:
+      - jaeger
+
+  gateway:
+    build: { context: ./services, args: { MODULE: gateway } }
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: gateway
+      ORDERS_URL: http://orders:8080
+    ports:
+      - "8080:8080"
+    depends_on: [collector, orders]
+
+  orders:
+    build: { context: ./services, args: { MODULE: orders } }
+    environment:
+      <<: [*otel-env, *db-env]
+      OTEL_SERVICE_NAME: orders
+      INVENTORY_URL: http://inventory:8080
+      PAYMENTS_URL: http://payments:8080
+    depends_on:
+      collector: { condition: service_started }
+      inventory: { condition: service_started }
+      payments: { condition: service_started }
+      postgres: { condition: service_healthy }
+
+  inventory:
+    build: { context: ./services, args: { MODULE: inventory } }
+    environment:
+      <<: [*otel-env, *db-env]
+      OTEL_SERVICE_NAME: inventory
+    depends_on:
+      collector: { condition: service_started }
+      postgres: { condition: service_healthy }
+
+  payments:
+    build: { context: ./services, args: { MODULE: payments } }
+    environment:
+      <<: [*otel-env, *db-env]
+      OTEL_SERVICE_NAME: payments
+    depends_on:
+      collector: { condition: service_started }
+      postgres: { condition: service_healthy }
