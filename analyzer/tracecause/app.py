@@ -74,7 +74,7 @@ def create_app(store: SpanStore, clock_ns=time.time_ns) -> FastAPI:
             "service": a.service,
             "window_start_s": a.window_start_ns // S,
             "detector": a.detector,
-            "evidence": [{"signal": e.signal, "value": e.value, "median": e.median,
+            "evidence": [{"signal": e.signal, "value": round(e.value, 4), "median": round(e.median, 4),
                           "scale": round(e.scale, 4), "z": e.z} for e in a.evidence],
         } for a in DETECTORS[detector].detect(scores) if start <= a.window_start_ns < end]
 
