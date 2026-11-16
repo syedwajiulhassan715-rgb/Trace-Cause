@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from .buckets import WINDOW_NS, Bucket, bucketize, window_start
 from .detect import PersistenceDetector, ThresholdDetector, score_series
 from .otlp import parse_export
+from .rank import call_graph, rank
 from .store import SpanStore
 
 S = 1_000_000_000
@@ -26,10 +27,20 @@ def create_app(store: SpanStore, clock_ns=time.time_ns) -> FastAPI:
         start = int(start_s * S) if start_s is not None else end - 300 * S
         return window_start(start), window_start(end - 1) + WINDOW_NS
 
-    def load_buckets(start, end, now) -> list[Bucket]:
+    def buckets_of(spans, start, end, now) -> list[Bucket]:
         # Whole traces may reach into neighbouring windows; keep only the requested ones.
-        return [b for b in bucketize(store.traces_between(start, end), now_ns=now)
-                if start <= b.window_start_ns < end]
+        return [b for b in bucketize(spans, now_ns=now) if start <= b.window_start_ns < end]
+
+    def load_buckets(start, end, now) -> list[Bucket]:
+        return buckets_of(store.traces_between(start, end), start, end, now)
+
+    def detect(detector, start, end, now):
+        """Scores (with history from before the range), alerts inside the range, and the spans used."""
+        spans = store.traces_between(start - HISTORY_WINDOWS * WINDOW_NS, end)
+        history = buckets_of(spans, start - HISTORY_WINDOWS * WINDOW_NS, end, now)
+        scores = score_series(history, history=HISTORY_WINDOWS)
+        alerts = [a for a in DETECTORS[detector].detect(scores) if start <= a.window_start_ns < end]
+        return scores, alerts, spans
 
     @app.post("/v1/traces")
     async def ingest(request: Request):
@@ -68,16 +79,29 @@ def create_app(store: SpanStore, clock_ns=time.time_ns) -> FastAPI:
                   start_s: float | None = None, end_s: float | None = None):
         now = clock_ns()
         start, end = window_range(start_s, end_s, now)
-        # The baseline needs the windows before the range, not just the range itself.
-        history = load_buckets(start - HISTORY_WINDOWS * WINDOW_NS, end, now)
-        scores = score_series(history, history=HISTORY_WINDOWS)
+        _, alerts, _ = detect(detector, start, end, now)
         return [{
             "service": a.service,
             "window_start_s": a.window_start_ns // S,
             "detector": a.detector,
             "evidence": [{"signal": e.signal, "value": round(e.value, 4), "median": round(e.median, 4),
                           "scale": round(e.scale, 4), "z": e.z} for e in a.evidence],
-        } for a in DETECTORS[detector].detect(scores) if start <= a.window_start_ns < end]
+        } for a in alerts]
+
+    @app.get("/rootcause")
+    def rootcause(detector: Literal["threshold", "persistence"] = "persistence",
+                  start_s: float | None = None, end_s: float | None = None):
+        now = clock_ns()
+        start, end = window_range(start_s, end_s, now)
+        scores, alerts, spans = detect(detector, start, end, now)
+        incident = {a.window_start_ns for a in alerts}
+        ranking = rank(scores, incident, call_graph(spans))
+        return {
+            "detector": detector,
+            "incident_windows_s": sorted(w // S for w in incident),
+            "ranking": [{"rank": i + 1, "service": c.service, "score": c.score, "signal": c.signal,
+                         "depth": c.depth} for i, c in enumerate(ranking)],
+        }
 
     @app.get("/health")
     def health():

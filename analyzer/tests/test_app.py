@@ -124,3 +124,26 @@ def test_anomalies_uses_history_before_the_requested_range():
 def test_unknown_detector_is_rejected():
     c, _ = client()
     assert c.get("/anomalies", params={"detector": "magic"}).status_code == 422
+
+
+def test_rootcause_ranks_the_slow_service_first():
+    from tracecause.otlp import Span
+    c, store = client(now_s=1000)
+    _steady_then_slow(store)  # inventory slows down from window 10
+    store.add([Span("o%d_%d" % (w, i), "s", None, "orders", "POST /orders", "SERVER",
+                    w * 10 * S + i * S, w * 10 * S + i * S + 10 * MS, False, "/orders", False)
+               for w in range(13) for i in range(6)])
+    r = c.get("/rootcause", params={"detector": "persistence", "start_s": 0, "end_s": 130}).json()
+    assert r["detector"] == "persistence"
+    assert r["incident_windows_s"] == [120]
+    assert r["ranking"] == [
+        {"rank": 1, "service": "inventory", "score": 290.0, "signal": "self_ms", "depth": 0},
+        {"rank": 2, "service": "orders", "score": 0.0, "signal": "self_ms", "depth": 0},
+    ]
+
+
+def test_rootcause_without_incident_is_empty():
+    c, _ = client()
+    c.post("/v1/traces", json=payload())
+    assert c.get("/rootcause", params={"start_s": 0, "end_s": 60}).json() == {
+        "detector": "persistence", "incident_windows_s": [], "ranking": []}
