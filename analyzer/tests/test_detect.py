@@ -101,3 +101,12 @@ def test_persistence_requires_adjacent_windows():
 def test_persistence_requires_the_same_signal():
     scores = [sc(1, 5.0, "self_ms"), sc(2, 5.0, "db_ms"), sc(3, 5.0, "self_ms")]
     assert PersistenceDetector(k=3, windows=3).detect(scores) == []
+
+
+def test_custom_signals_can_be_scored():
+    from tracecause.detect import Signal
+    total = (Signal("total_ms", "p50_ms", 1.0),)
+    buckets = [Bucket("a", i * WINDOW_NS, 100, 0, 0, 0.0, 50.0, 0.0, 1.0, 1.0, 1.0, 1.0, True) for i in range(10)]
+    buckets.append(Bucket("a", 10 * WINDOW_NS, 100, 0, 0, 0.0, 60.0, 0.0, 1.0, 1.0, 1.0, 1.0, True))
+    last = [s for s in score_series(buckets, signals=total) if s.window_start_ns == 10 * WINDOW_NS]
+    assert [(s.signal, s.z) for s in last] == [("total_ms", 10.0)]

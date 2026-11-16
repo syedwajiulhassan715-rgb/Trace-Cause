@@ -68,7 +68,7 @@ def robust_stats(values, floor):
 
 
 def score_series(buckets: list[Bucket], history: int = 30, min_history: int = 6,
-                 min_requests: int = 5) -> list[Score]:
+                 min_requests: int = 5, signals: tuple[Signal, ...] = SIGNALS) -> list[Score]:
     """Score every usable window of every service against its trailing baseline."""
     by_service = defaultdict(list)
     for bk in buckets:
@@ -82,7 +82,7 @@ def score_series(buckets: list[Bucket], history: int = 30, min_history: int = 6,
             past = series[max(0, i - history):i]
             if len(past) < min_history:
                 continue
-            for sig in SIGNALS:
+            for sig in signals:
                 med, scale = robust_stats([getattr(p, sig.attr) for p in past], sig.floor)
                 value = getattr(bk, sig.attr)
                 z = max(0.0, (value - med) / scale)
