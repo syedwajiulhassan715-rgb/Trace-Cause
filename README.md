@@ -14,7 +14,7 @@ explanation, never to decide.
 - [x] 2. Load generator and fault injector
 - [x] 3. Span ingest and 10 s buckets
 - [x] 4. Self-time
-- [ ] 5. Baselines and detectors
+- [x] 5. Baselines and detectors
 - [ ] 6. Root-cause ranking
 - [ ] 7. Evaluation: top-1 / top-3 accuracy on injected faults
 - [ ] 8. Dashboard (TypeScript/React)
@@ -77,6 +77,34 @@ the running stack (p50 per 10 s window, ms):
 | no fault | 21 / 2.5 | 19 / 4.6 | 1.0 / 2.9 | 1.0 / 2.9 |
 | inventory `delayMs=200` | 223 / 2.6 | 220 / 4.9 | **201** / 3.1 | 1.0 / 3.0 |
 | payments `slowQueryMs=300` | 321 / 2.2 | 319 / 4.1 | 0.9 / 2.9 | 1.0 / **304** |
+
+### Baselines and detectors
+
+Each closed window of a service is scored on three signals: `self_ms`
+(`self_p50_ms`), `db_ms` (`db_p50_ms`) and `error_rate`. The baseline is that
+service's previous 30 windows (at least 6; windows with fewer than 5 requests,
+such as JVM warm-up, are skipped). The score is a one-sided robust z-score:
+
+```
+z = (value - median) / max(1.4826 * MAD, floor)      floor: 1 ms, or 0.02 for error rate
+```
+
+Median and MAD are not dragged around by a few outliers. The floor stops a very
+steady signal from turning a tiny wobble into a huge z.
+
+| Detector | Fires when | Trade-off |
+|---|---|---|
+| `threshold` (naive) | any signal has z >= 3 in one window | fast, but one noisy window is enough |
+| `persistence` | the same signal has z >= 3 in 3 consecutive windows | ignores short spikes, alerts 20 s later |
+
+```sh
+curl "localhost:8000/anomalies?detector=threshold"
+curl "localhost:8000/anomalies?detector=persistence&start_s=...&end_s=..."
+```
+
+Each alert lists its evidence: signal, value, baseline median, scale and z.
+These parameters are defaults; they will be tuned on the tuning scenarios only
+(step 7), and accuracy will be reported on held-out scenarios.
 
 ## Load and faults
 
