@@ -11,7 +11,7 @@ explanation, never to decide.
 
 ## Status (work in progress)
 - [x] 1. Demo services with OpenTelemetry tracing (Java)
-- [ ] 2. Load generator and fault injector
+- [x] 2. Load generator and fault injector
 - [ ] 3. Span ingest and 10 s buckets
 - [ ] 4. Self-time
 - [ ] 5. Baselines and detectors
@@ -36,6 +36,31 @@ each service: OpenTelemetry Java agent --OTLP/HTTP--> Collector --OTLP/gRPC--> J
 | OpenTelemetry Collector | 0.163.1 |
 | Jaeger | 2.22.0 |
 | Postgres | 17 |
+
+## Load and faults
+
+Every service has an admin endpoint, `/admin/fault`, that sets one fault:
+
+| Fault | What it does | Where it shows in the trace |
+|---|---|---|
+| `delayMs` | sleeps inside the request handler | the service's own (self) time |
+| `slowQueryMs` | runs `pg_sleep` before each SQL statement | a slow database span in that service |
+| `errorRate` | answers HTTP 500 with this probability (seeded) | error status on that service's span, 502 upstream |
+
+Nothing about the fault is written into the trace, so the analyzer has to find it.
+Host ports: gateway 8080, orders 8081, inventory 8082, payments 8083.
+
+```sh
+python -m loadgen.load --rate 20 --duration 60 --seed 1     # seeded open-loop load
+python -m loadgen.faults set inventory --delay-ms 200
+python -m loadgen.faults set payments --error-rate 0.3 --seed 7
+python -m loadgen.faults show
+python -m loadgen.faults clear                               # all services
+```
+
+The load generator is open loop: requests go out on a fixed Poisson schedule
+whether or not earlier ones are done, so a slowdown is not hidden by the client
+backing off.
 
 ## Run
 
@@ -65,4 +90,10 @@ End-to-end tracing check (stack must be running; Python 3, stdlib only):
 
 ```sh
 python scripts/smoke_test.py
+```
+
+Load generator and fault-injector tests (Python 3, stdlib only):
+
+```sh
+python -m unittest discover -s loadgen/tests -t .
 ```
