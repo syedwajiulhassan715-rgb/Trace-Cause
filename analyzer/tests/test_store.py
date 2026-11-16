@@ -39,3 +39,11 @@ def test_trace_lookup_returns_all_spans_of_a_trace():
     store = SpanStore(":memory:")
     store.add([mk("a", 1, trace="t1"), mk("b", 2, trace="t2"), mk("c", 3, trace="t1")])
     assert [s.span_id for s in store.trace("t1")] == ["a", "c"]
+
+
+def test_traces_between_returns_whole_traces_that_start_in_range():
+    store = SpanStore(":memory:")
+    # t1 starts at 9 s; its child starts at 11 s, past the range end. It must still come back.
+    store.add([mk("a", 9, trace="t1"), mk("b", 11, trace="t1"), mk("c", 15, trace="t2"), mk("d", 3, trace="t3")])
+    got = sorted((s.trace_id, s.span_id) for s in store.traces_between(5 * S, 10 * S))
+    assert got == [("t1", "a"), ("t1", "b")]

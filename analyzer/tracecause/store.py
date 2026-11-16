@@ -57,6 +57,15 @@ class SpanStore:
         """Spans whose start time is in [start_ns, end_ns)."""
         return self._query("WHERE start_ns >= ? AND start_ns < ? ORDER BY start_ns, span_id", (start_ns, end_ns))
 
+    def traces_between(self, start_ns: int, end_ns: int) -> list[Span]:
+        """Every span of every trace that has a span starting in [start_ns, end_ns).
+
+        Self-time needs a request's children even when they start after the window ends.
+        """
+        return self._query(
+            "WHERE trace_id IN (SELECT DISTINCT trace_id FROM spans WHERE start_ns >= ? AND start_ns < ?)"
+            " ORDER BY start_ns, span_id", (start_ns, end_ns))
+
     def trace(self, trace_id: str) -> list[Span]:
         return self._query("WHERE trace_id = ? ORDER BY start_ns, span_id", (trace_id,))
 
