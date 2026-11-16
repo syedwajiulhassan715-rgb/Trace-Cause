@@ -12,7 +12,7 @@ explanation, never to decide.
 ## Status (work in progress)
 - [x] 1. Demo services with OpenTelemetry tracing (Java)
 - [x] 2. Load generator and fault injector
-- [ ] 3. Span ingest and 10 s buckets
+- [x] 3. Span ingest and 10 s buckets
 - [ ] 4. Self-time
 - [ ] 5. Baselines and detectors
 - [ ] 6. Root-cause ranking
@@ -27,6 +27,7 @@ client -> gateway -> orders -> inventory
           (orders, inventory, payments write to Postgres)
 
 each service: OpenTelemetry Java agent --OTLP/HTTP--> Collector --OTLP/gRPC--> Jaeger
+                                                                \--OTLP/HTTP JSON--> analyzer (Python)
 ```
 
 | Component | Version |
@@ -36,6 +37,25 @@ each service: OpenTelemetry Java agent --OTLP/HTTP--> Collector --OTLP/gRPC--> J
 | OpenTelemetry Collector | 0.163.1 |
 | Jaeger | 2.22.0 |
 | Postgres | 17 |
+| Analyzer | Python 3.13, FastAPI 0.163.1 |
+
+## Analyzer
+
+The Collector sends every span batch to the analyzer as OTLP JSON. The analyzer
+stores spans in SQLite (one row per span, keyed by trace and span id, so a
+retried batch is not counted twice) and groups each service's incoming
+requests (its SERVER spans) into 10 s windows by start time.
+
+```sh
+curl localhost:8000/health
+curl "localhost:8000/buckets?service=inventory"            # last 5 minutes
+curl "localhost:8000/buckets?start_s=1794868650&end_s=1794868710"
+```
+
+Each bucket has `requests`, `errors`, `error_rate`, `mean_ms`, `p50_ms`, `p95_ms`
+(nearest-rank) and `closed`. A window is closed 15 s after it ends; until then
+late spans may still arrive, so detectors should only judge closed windows.
+Calls to `/admin/fault` are dropped at ingest.
 
 ## Load and faults
 
@@ -90,6 +110,14 @@ End-to-end tracing check (stack must be running; Python 3, stdlib only):
 
 ```sh
 python scripts/smoke_test.py
+```
+
+Analyzer tests (Python 3.13):
+
+```sh
+cd analyzer
+python -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt   # bin/ on Linux/macOS
+.venv/Scripts/python -m pytest -q
 ```
 
 Load generator and fault-injector tests (Python 3, stdlib only):
