@@ -33,6 +33,13 @@ services:
     ports:
       - "16686:16686"
 
+  analyzer:
+    build: ./analyzer
+    ports:
+      - "8000:8000"
+    volumes:
+      - analyzer-data:/data
+
   collector:
     image: otel/opentelemetry-collector:0.163.1
     command: ["--config=/etc/otelcol/tracecause.yaml"]
@@ -40,6 +47,7 @@ services:
       - ./collector/config.yaml:/etc/otelcol/tracecause.yaml:ro
     depends_on:
       - jaeger
+      - analyzer
 
   gateway:
     build: { context: ./services, args: { MODULE: gateway } }
@@ -87,3 +95,6 @@ services:
     depends_on:
       collector: { condition: service_started }
       postgres: { condition: service_healthy }
+
+volumes:
+  analyzer-data:

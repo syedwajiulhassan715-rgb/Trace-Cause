@@ -10,6 +10,11 @@ processors:
   batch: {}
 
 exporters:
+  # JSON, uncompressed: the analyzer parses OTLP JSON directly (no protobuf or gzip handling).
+  otlp_http/analyzer:
+    endpoint: http://analyzer:8000
+    encoding: json
+    compression: none
   otlp_grpc/jaeger:
     endpoint: jaeger:4317
     tls:
@@ -20,4 +25,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp_grpc/jaeger]
+      exporters: [otlp_grpc/jaeger, otlp_http/analyzer]
