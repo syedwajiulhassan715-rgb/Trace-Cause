@@ -15,7 +15,7 @@ explanation, never to decide.
 - [x] 3. Span ingest and 10 s buckets
 - [x] 4. Self-time
 - [x] 5. Baselines and detectors
-- [ ] 6. Root-cause ranking
+- [x] 6. Root-cause ranking
 - [ ] 7. Evaluation: top-1 / top-3 accuracy on injected faults
 - [ ] 8. Dashboard (TypeScript/React)
 
@@ -107,6 +107,32 @@ curl "localhost:8000/anomalies?detector=persistence&start_s=...&end_s=..."
 Each alert lists its evidence: signal, value, baseline median, scale and z.
 These parameters are defaults; they will be tuned on the tuning scenarios only
 (step 7), and accuracy will be reported on held-out scenarios.
+
+### Root-cause ranking
+
+An incident is the set of windows in which the chosen detector fired. For each
+service, take its strongest signal z in each incident window; the service's
+score is the median of those over the incident (a missing window counts as 0).
+On equal scores the more downstream service in the call graph (built from the
+spans) ranks first. The ranking is deterministic.
+
+```sh
+curl "localhost:8000/rootcause?detector=persistence&start_s=...&end_s=..."
+```
+
+Most of the attribution happens before ranking: self-time removes the waiting a
+service inherits from its callees, and own errors remove the failures it only
+passed on. Example from one manual run (20 req/s, one 40 s fault per phase;
+this is a demonstration, not the evaluation):
+
+| Fault | Rank 1 (both detectors) | Signal | Other services |
+|---|---|---|---|
+| inventory `delayMs=150` | inventory | `self_ms` | z <= 0.15 |
+| payments `errorRate=0.3` | payments | `own_error_rate` | z = 0 |
+| orders `slowQueryMs=100` | orders | `db_ms` | z <= 0.05 |
+
+During the payments error fault, orders and gateway reported the same number
+of errors as payments (53 in one window), but all 53 were payments' own.
 
 ## Load and faults
 
