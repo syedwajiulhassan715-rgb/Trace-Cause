@@ -1,13 +1,17 @@
 package dev.tracecause.orders;
 
+import dev.tracecause.faults.FaultsConfiguration;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 @SpringBootApplication
+@Import(FaultsConfiguration.class)
 public class OrdersApplication {
 
     public static void main(String[] args) {
