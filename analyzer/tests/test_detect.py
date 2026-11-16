@@ -5,7 +5,7 @@ from tracecause.detect import (PersistenceDetector, Score, ThresholdDetector, ro
 
 
 def b(i, self_ms=10.0, db_ms=3.0, errors=0, requests=100, service="inventory", closed=True):
-    return Bucket(service, i * WINDOW_NS, requests, errors, 0.0, 0.0, 0.0,
+    return Bucket(service, i * WINDOW_NS, requests, errors, errors, 0.0, 0.0, 0.0,
                   self_ms, self_ms, db_ms, db_ms, closed)
 
 
@@ -55,9 +55,9 @@ def test_open_and_tiny_windows_are_skipped():
     assert score_series(buckets) == []
 
 
-def test_error_rate_signal_uses_its_floor():
+def test_own_error_rate_signal_uses_its_floor():
     buckets = [b(i) for i in range(10)] + [b(10, errors=30)]
-    err = [s for s in score_series(buckets) if s.window_start_ns == 10 * WINDOW_NS and s.signal == "error_rate"]
+    err = [s for s in score_series(buckets) if s.window_start_ns == 10 * WINDOW_NS and s.signal == "own_error_rate"]
     assert err[0].z == pytest.approx(0.30 / 0.02)
 
 
@@ -76,9 +76,9 @@ def test_threshold_fires_on_a_single_window():
 
 
 def test_threshold_groups_signals_of_one_window():
-    alerts = ThresholdDetector(k=3).detect([sc(1, 4.0, "self_ms"), sc(1, 5.0, "error_rate"), sc(1, 1.0, "db_ms")])
+    alerts = ThresholdDetector(k=3).detect([sc(1, 4.0, "self_ms"), sc(1, 5.0, "own_error_rate"), sc(1, 1.0, "db_ms")])
     assert len(alerts) == 1
-    assert {e.signal for e in alerts[0].evidence} == {"self_ms", "error_rate"}
+    assert {e.signal for e in alerts[0].evidence} == {"self_ms", "own_error_rate"}
 
 
 def test_persistence_ignores_short_spikes():

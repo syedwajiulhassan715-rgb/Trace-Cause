@@ -53,7 +53,7 @@ def test_per_request_own_and_db_time():
 def test_request_time_carries_the_server_span_identity():
     r = next(r for r in request_times(TRACE) if r.service == "inventory")
     assert r == RequestTime(service="inventory", trace_id="t1", span_id="in", start_ns=27 * MS,
-                            own_ns=26 * MS, db_ns=5 * MS)
+                            own_ns=26 * MS, db_ns=5 * MS, error=False, own_error=False)
 
 
 def test_children_are_clipped_to_parent():
@@ -82,3 +82,37 @@ def test_nested_server_in_same_service_starts_a_new_request():
     ]
     got = sorted((r.span_id, r.own_ns / MS) for r in request_times(spans))
     assert got == [("a1", 24), ("a2", 26)]
+
+
+def _err(span_id, service, kind, start_ms, end_ms, parent=None, error=False):
+    return Span("t1", span_id, parent, service, span_id, kind, start_ms * MS, end_ms * MS, error, None, False)
+
+
+def test_error_is_owned_by_the_deepest_failing_request():
+    # payments fails; orders and gateway fail only because of it.
+    spans = [
+        _err("gw", "gateway", "SERVER", 0, 50, error=True),
+        _err("gw-c", "gateway", "CLIENT", 5, 45, parent="gw", error=True),
+        _err("or", "orders", "SERVER", 10, 40, parent="gw-c", error=True),
+        _err("or-c1", "orders", "CLIENT", 12, 20, parent="or"),
+        _err("in", "inventory", "SERVER", 13, 19, parent="or-c1"),
+        _err("or-c2", "orders", "CLIENT", 22, 35, parent="or", error=True),
+        _err("pa", "payments", "SERVER", 23, 34, parent="or-c2", error=True),
+    ]
+    got = {r.service: (r.error, r.own_error) for r in request_times(spans)}
+    assert got == {
+        "gateway": (True, False),
+        "orders": (True, False),
+        "inventory": (False, False),
+        "payments": (True, True),
+    }
+
+
+def test_error_without_a_failing_downstream_request_is_owned():
+    # The call to payments never produced a server span (e.g. connection refused): orders owns it.
+    spans = [
+        _err("or", "orders", "SERVER", 0, 10, error=True),
+        _err("or-c", "orders", "CLIENT", 2, 8, parent="or", error=True),
+    ]
+    (r,) = request_times(spans)
+    assert (r.error, r.own_error) == (True, True)

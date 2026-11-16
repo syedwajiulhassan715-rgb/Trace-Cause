@@ -52,6 +52,7 @@ def create_app(store: SpanStore, clock_ns=time.time_ns) -> FastAPI:
             "requests": b.requests,
             "errors": b.errors,
             "error_rate": round(b.error_rate, 4),
+            "own_errors": b.own_errors,
             "mean_ms": b.mean_ms,
             "p50_ms": b.p50_ms,
             "p95_ms": b.p95_ms,

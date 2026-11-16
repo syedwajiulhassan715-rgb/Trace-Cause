@@ -81,7 +81,9 @@ the running stack (p50 per 10 s window, ms):
 ### Baselines and detectors
 
 Each closed window of a service is scored on three signals: `self_ms`
-(`self_p50_ms`), `db_ms` (`db_p50_ms`) and `error_rate`. The baseline is that
+(`self_p50_ms`), `db_ms` (`db_p50_ms`) and `own_error_rate`. An error is the
+service's *own* only if none of the downstream requests it made failed, so a
+failure in payments is not also counted against orders and gateway. The baseline is that
 service's previous 30 windows (at least 6; windows with fewer than 5 requests,
 such as JVM warm-up, are skipped). The score is a one-sided robust z-score:
 

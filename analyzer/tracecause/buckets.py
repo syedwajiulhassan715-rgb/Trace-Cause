@@ -27,6 +27,7 @@ class Bucket:
     window_start_ns: int
     requests: int
     errors: int
+    own_errors: int     # errors that started here, not in a downstream service (see selftime.py)
     mean_ms: float
     p50_ms: float
     p95_ms: float
@@ -39,6 +40,10 @@ class Bucket:
     @property
     def error_rate(self) -> float:
         return self.errors / self.requests if self.requests else 0.0
+
+    @property
+    def own_error_rate(self) -> float:
+        return self.own_errors / self.requests if self.requests else 0.0
 
 
 def window_start(ns: int, width_ns: int = WINDOW_NS) -> int:
@@ -74,6 +79,7 @@ def bucketize(spans: list[Span], now_ns: int, width_ns: int = WINDOW_NS, grace_n
             window_start_ns=start,
             requests=len(group),
             errors=sum(s.error for s in group),
+            own_errors=sum(t.own_error for t in times),
             mean_ms=round(sum(durations) / len(durations), 3),
             p50_ms=round(percentile(durations, 0.50), 3),
             p95_ms=round(percentile(durations, 0.95), 3),

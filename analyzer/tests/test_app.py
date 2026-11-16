@@ -47,9 +47,11 @@ def test_buckets_endpoint():
     assert r.status_code == 200
     assert r.json() == [
         {"service": "orders", "window_start_s": 0, "requests": 2, "errors": 1, "error_rate": 0.5,
+         "own_errors": 1,
          "mean_ms": 40.0, "p50_ms": 30.0, "p95_ms": 50.0,
          "self_p50_ms": 28.0, "self_p95_ms": 50.0, "db_p50_ms": 0.0, "db_p95_ms": 2.0, "closed": True},
         {"service": "inventory", "window_start_s": 10, "requests": 1, "errors": 0, "error_rate": 0.0,
+         "own_errors": 0,
          "mean_ms": 8.0, "p50_ms": 8.0, "p95_ms": 8.0,
          "self_p50_ms": 8.0, "self_p95_ms": 8.0, "db_p50_ms": 0.0, "db_p95_ms": 0.0, "closed": True},
     ]

@@ -35,9 +35,9 @@ def test_groups_server_spans_by_service_and_window():
     got = bucketize(spans, now_ns=100 * S)
     assert got == [
         # no child spans, so all time is self-time and there is no DB time
-        Bucket("orders", 0, 3, 1, 20.0, 20.0, 30.0, 20.0, 30.0, 0.0, 0.0, True),
-        Bucket("payments", 0, 1, 0, 5.0, 5.0, 5.0, 5.0, 5.0, 0.0, 0.0, True),
-        Bucket("orders", 10 * S, 1, 0, 40.0, 40.0, 40.0, 40.0, 40.0, 0.0, 0.0, True),
+        Bucket("orders", 0, 3, 1, 1, 20.0, 20.0, 30.0, 20.0, 30.0, 0.0, 0.0, True),
+        Bucket("payments", 0, 1, 0, 0, 5.0, 5.0, 5.0, 5.0, 5.0, 0.0, 0.0, True),
+        Bucket("orders", 10 * S, 1, 0, 0, 40.0, 40.0, 40.0, 40.0, 40.0, 0.0, 0.0, True),
     ]
 
 
@@ -76,5 +76,5 @@ def test_window_is_open_until_grace_has_passed():
 
 
 def test_error_rate_property():
-    b = Bucket("orders", 0, 4, 1, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, True)
-    assert b.error_rate == 0.25
+    b = Bucket("orders", 0, 4, 2, 1, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, True)
+    assert (b.error_rate, b.own_error_rate) == (0.5, 0.25)

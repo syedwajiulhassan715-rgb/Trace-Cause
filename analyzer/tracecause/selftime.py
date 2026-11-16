@@ -10,6 +10,12 @@ request begins (a SERVER span, usually in another service). That total is split:
 - own_ns: the service's code, including the overhead of its outgoing calls
 - db_ns:  its database client spans (they have no children, so self = duration)
 
+Errors are attributed the same way. An error propagates up: when payments
+fails, orders and gateway fail too. A failed request is an *own error* only if
+none of the downstream requests it made (the SERVER spans it reached) failed.
+If the downstream request never produced a span (connection refused), the
+caller owns the error, because that is all the trace shows.
+
 If a child span is missing (never arrived), its time stays with the parent:
 we cannot attribute what we did not see. Analysing closed windows only keeps
 this rare.
@@ -31,6 +37,8 @@ class RequestTime:
     start_ns: int
     own_ns: int
     db_ns: int
+    error: bool
+    own_error: bool
 
 
 def union_ns(intervals) -> int:
@@ -76,6 +84,7 @@ def request_times(spans: list[Span]) -> list[RequestTime]:
         if root.kind != "SERVER":
             continue
         own = db = 0
+        downstream_failed = False
         stack = [root]
         while stack:
             s = stack.pop()
@@ -85,7 +94,10 @@ def request_times(spans: list[Span]) -> list[RequestTime]:
             else:
                 own += t
             for c in kids.get((s.trace_id, s.span_id), []):
-                if c.kind != "SERVER":  # a SERVER child is another request; it gets its own entry
+                if c.kind == "SERVER":  # another request; it gets its own entry
+                    downstream_failed |= c.error
+                else:
                     stack.append(c)
-        out.append(RequestTime(root.service, root.trace_id, root.span_id, root.start_ns, own, db))
+        out.append(RequestTime(root.service, root.trace_id, root.span_id, root.start_ns, own, db,
+                               error=root.error, own_error=root.error and not downstream_failed))
     return out

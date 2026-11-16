@@ -38,7 +38,7 @@ class Signal:
 SIGNALS = (
     Signal("self_ms", "self_p50_ms", 1.0),     # ms
     Signal("db_ms", "db_p50_ms", 1.0),         # ms
-    Signal("error_rate", "error_rate", 0.02),  # 2 percentage points
+    Signal("own_error_rate", "own_error_rate", 0.02),  # 2 percentage points
 )
 
 
