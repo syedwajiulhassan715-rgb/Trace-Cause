@@ -47,9 +47,11 @@ def test_buckets_endpoint():
     assert r.status_code == 200
     assert r.json() == [
         {"service": "orders", "window_start_s": 0, "requests": 2, "errors": 1, "error_rate": 0.5,
-         "mean_ms": 40.0, "p50_ms": 30.0, "p95_ms": 50.0, "closed": True},
+         "mean_ms": 40.0, "p50_ms": 30.0, "p95_ms": 50.0,
+         "self_p50_ms": 28.0, "self_p95_ms": 50.0, "db_p50_ms": 0.0, "db_p95_ms": 2.0, "closed": True},
         {"service": "inventory", "window_start_s": 10, "requests": 1, "errors": 0, "error_rate": 0.0,
-         "mean_ms": 8.0, "p50_ms": 8.0, "p95_ms": 8.0, "closed": True},
+         "mean_ms": 8.0, "p50_ms": 8.0, "p95_ms": 8.0,
+         "self_p50_ms": 8.0, "self_p95_ms": 8.0, "db_p50_ms": 0.0, "db_p95_ms": 0.0, "closed": True},
     ]
 
 
@@ -64,6 +66,12 @@ def test_buckets_default_to_last_five_minutes():
     c, _ = client(now_s=1000)
     c.post("/v1/traces", json=payload())  # spans at 1-11 s are older than 1000 - 300
     assert c.get("/buckets").json() == []
+
+
+def test_buckets_only_cover_the_requested_windows():
+    c, _ = client(now_s=100)
+    c.post("/v1/traces", json=payload())  # same trace has spans at 1 s and 11 s
+    assert [b["window_start_s"] for b in c.get("/buckets", params={"start_s": 0, "end_s": 10}).json()] == [0]
 
 
 def test_health_reports_span_count():

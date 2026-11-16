@@ -34,9 +34,10 @@ def test_groups_server_spans_by_service_and_window():
     ]
     got = bucketize(spans, now_ns=100 * S)
     assert got == [
-        Bucket("orders", 0, 3, 1, 20.0, 20.0, 30.0, True),
-        Bucket("payments", 0, 1, 0, 5.0, 5.0, 5.0, True),
-        Bucket("orders", 10 * S, 1, 0, 40.0, 40.0, 40.0, True),
+        # no child spans, so all time is self-time and there is no DB time
+        Bucket("orders", 0, 3, 1, 20.0, 20.0, 30.0, 20.0, 30.0, 0.0, 0.0, True),
+        Bucket("payments", 0, 1, 0, 5.0, 5.0, 5.0, 5.0, 5.0, 0.0, 0.0, True),
+        Bucket("orders", 10 * S, 1, 0, 40.0, 40.0, 40.0, 40.0, 40.0, 0.0, 0.0, True),
     ]
 
 
@@ -44,6 +45,21 @@ def test_only_server_spans_count_as_requests():
     db = Span("t", "db1", "s1", "orders", "INSERT", "CLIENT", 1 * S, 1 * S + 3 * MS, False, None, True)
     got = bucketize([server("orders", 1, 10), db], now_ns=100 * S)
     assert [b.requests for b in got] == [1]
+
+
+def test_self_and_db_time_per_bucket():
+    # orders spends 30 ms; 10 ms of it waiting on inventory, 5 ms in its database.
+    spans = [
+        server("orders", 1, 30, span_id="or"),
+        Span("t", "db", "or", "orders", "INSERT", "CLIENT", 1 * S + 1 * MS, 1 * S + 6 * MS, False, None, True),
+        Span("t", "call", "or", "orders", "POST", "CLIENT", 1 * S + 10 * MS, 1 * S + 20 * MS, False, None, False),
+        Span("t", "inv", "call", "inventory", "POST /reserve", "SERVER", 1 * S + 11 * MS, 1 * S + 19 * MS,
+             False, "/reserve", False),
+    ]
+    by_service = {b.service: b for b in bucketize(spans, now_ns=100 * S)}
+    # orders own: server 30 - 5 - 10 = 15, plus call overhead 10 - 8 = 2
+    assert (by_service["orders"].self_p50_ms, by_service["orders"].db_p50_ms) == (17.0, 5.0)
+    assert (by_service["inventory"].self_p50_ms, by_service["inventory"].db_p50_ms) == (8.0, 0.0)
 
 
 def test_admin_spans_are_ignored():
@@ -60,5 +76,5 @@ def test_window_is_open_until_grace_has_passed():
 
 
 def test_error_rate_property():
-    b = Bucket("orders", 0, 4, 1, 1.0, 1.0, 1.0, True)
+    b = Bucket("orders", 0, 4, 1, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, True)
     assert b.error_rate == 0.25

@@ -36,8 +36,9 @@ def create_app(store: SpanStore, clock_ns=time.time_ns) -> FastAPI:
         start = window_start(start)
         end = window_start(end - 1) + WINDOW_NS
         out = []
-        for b in bucketize(store.spans_between(start, end), now_ns=now):
-            if service and b.service != service:
+        for b in bucketize(store.traces_between(start, end), now_ns=now):
+            # Whole traces may reach into neighbouring windows; report only the requested ones.
+            if not start <= b.window_start_ns < end or (service and b.service != service):
                 continue
             out.append({
                 "service": b.service,
@@ -48,6 +49,10 @@ def create_app(store: SpanStore, clock_ns=time.time_ns) -> FastAPI:
                 "mean_ms": b.mean_ms,
                 "p50_ms": b.p50_ms,
                 "p95_ms": b.p95_ms,
+                "self_p50_ms": b.self_p50_ms,
+                "self_p95_ms": b.self_p95_ms,
+                "db_p50_ms": b.db_p50_ms,
+                "db_p95_ms": b.db_p95_ms,
                 "closed": b.closed,
             })
         return out

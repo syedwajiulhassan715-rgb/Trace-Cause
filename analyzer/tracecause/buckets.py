@@ -2,7 +2,8 @@
 
 A request to a service is that service's SERVER span. Each span goes in the
 window that contains its start time. Database and outgoing-call spans are not
-requests; step 4 (self-time) uses them to split time between services.
+requests; they feed each request's self-time and DB time (see selftime.py).
+Pass whole traces in, so every request's children are present.
 """
 
 import math
@@ -10,6 +11,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from .otlp import Span
+from .selftime import request_times
 
 WINDOW_NS = 10 * 1_000_000_000
 # A window is "closed" once spans for it can no longer realistically arrive:
@@ -28,6 +30,10 @@ class Bucket:
     mean_ms: float
     p50_ms: float
     p95_ms: float
+    self_p50_ms: float  # time in the service's own code (excludes downstream services and DB)
+    self_p95_ms: float
+    db_p50_ms: float    # time in the service's database calls
+    db_p95_ms: float
     closed: bool
 
     @property
@@ -45,7 +51,13 @@ def percentile(sorted_values, p):
     return sorted_values[rank - 1]
 
 
+def _ms_percentiles(values_ns):
+    v = sorted(x / MS for x in values_ns)
+    return round(percentile(v, 0.50), 3), round(percentile(v, 0.95), 3)
+
+
 def bucketize(spans: list[Span], now_ns: int, width_ns: int = WINDOW_NS, grace_ns: int = GRACE_NS) -> list[Bucket]:
+    rt = {(r.trace_id, r.span_id): r for r in request_times(spans)}
     groups = defaultdict(list)
     for s in spans:
         if s.kind == "SERVER" and not s.is_admin:
@@ -54,14 +66,21 @@ def bucketize(spans: list[Span], now_ns: int, width_ns: int = WINDOW_NS, grace_n
     out = []
     for (start, service), group in sorted(groups.items()):
         durations = sorted(s.duration_ns / MS for s in group)
+        times = [rt[(s.trace_id, s.span_id)] for s in group]
+        self_p50, self_p95 = _ms_percentiles(t.own_ns for t in times)
+        db_p50, db_p95 = _ms_percentiles(t.db_ns for t in times)
         out.append(Bucket(
             service=service,
             window_start_ns=start,
             requests=len(group),
             errors=sum(s.error for s in group),
             mean_ms=round(sum(durations) / len(durations), 3),
-            p50_ms=percentile(durations, 0.50),
-            p95_ms=percentile(durations, 0.95),
+            p50_ms=round(percentile(durations, 0.50), 3),
+            p95_ms=round(percentile(durations, 0.95), 3),
+            self_p50_ms=self_p50,
+            self_p95_ms=self_p95,
+            db_p50_ms=db_p50,
+            db_p95_ms=db_p95,
             closed=start + width_ns + grace_ns <= now_ns,
         ))
     return out
