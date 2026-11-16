@@ -13,7 +13,7 @@ explanation, never to decide.
 - [x] 1. Demo services with OpenTelemetry tracing (Java)
 - [x] 2. Load generator and fault injector
 - [x] 3. Span ingest and 10 s buckets
-- [ ] 4. Self-time
+- [x] 4. Self-time
 - [ ] 5. Baselines and detectors
 - [ ] 6. Root-cause ranking
 - [ ] 7. Evaluation: top-1 / top-3 accuracy on injected faults
@@ -53,9 +53,30 @@ curl "localhost:8000/buckets?start_s=1794868650&end_s=1794868710"
 ```
 
 Each bucket has `requests`, `errors`, `error_rate`, `mean_ms`, `p50_ms`, `p95_ms`
-(nearest-rank) and `closed`. A window is closed 15 s after it ends; until then
+(nearest-rank), the self-time fields below, and `closed`. A window is closed 15 s after it ends; until then
 late spans may still arrive, so detectors should only judge closed windows.
 Calls to `/admin/fault` are dropped at ingest.
+
+### Self-time
+
+A slow service makes every service above it slow too, because they wait for
+it. Total latency therefore points at the wrong place. Self-time removes the
+waiting:
+
+- **span self-time** = span duration minus the *union* of its children's time
+  intervals, clipped to the span (concurrent calls are subtracted once, not twice);
+- **request time** = for one incoming request (SERVER span), the self-time of
+  every span that service made while handling it, split into
+  `self` (its own code, including outgoing-call overhead) and `db` (its SQL calls).
+
+Buckets report `self_p50_ms`, `self_p95_ms`, `db_p50_ms`, `db_p95_ms`. Measured on
+the running stack (p50 per 10 s window, ms):
+
+| Phase | gateway total / self | orders total / self | inventory self / db | payments self / db |
+|---|---|---|---|---|
+| no fault | 21 / 2.5 | 19 / 4.6 | 1.0 / 2.9 | 1.0 / 2.9 |
+| inventory `delayMs=200` | 223 / 2.6 | 220 / 4.9 | **201** / 3.1 | 1.0 / 3.0 |
+| payments `slowQueryMs=300` | 321 / 2.2 | 319 / 4.1 | 0.9 / 2.9 | 1.0 / **304** |
 
 ## Load and faults
 
