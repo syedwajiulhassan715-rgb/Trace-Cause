@@ -17,6 +17,7 @@
     <packaging>pom</packaging>
 
     <modules>
+        <module>faults</module>
         <module>gateway</module>
         <module>orders</module>
         <module>inventory</module>
