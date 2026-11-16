@@ -78,3 +78,47 @@ def test_health_reports_span_count():
     c, _ = client()
     c.post("/v1/traces", json=payload())
     assert c.get("/health").json() == {"status": "ok", "spans": 4}
+
+
+def _steady_then_slow(store):
+    """inventory: 6 requests per window; 10 ms in windows 0-9, 300 ms in windows 10-12."""
+    from tracecause.otlp import Span
+    spans = []
+    for w in range(13):
+        for i in range(6):
+            start = w * 10 * S + i * S
+            dur = (300 if w >= 10 else 10) * MS
+            spans.append(Span("t%d_%d" % (w, i), "s", None, "inventory", "POST /reserve", "SERVER",
+                              start, start + dur, False, "/reserve", False))
+    store.add(spans)
+
+
+def test_anomalies_threshold_flags_every_slow_window():
+    c, store = client(now_s=1000)
+    _steady_then_slow(store)
+    alerts = c.get("/anomalies", params={"detector": "threshold", "start_s": 0, "end_s": 130}).json()
+    assert [(a["service"], a["window_start_s"]) for a in alerts] == [("inventory", 100), ("inventory", 110), ("inventory", 120)]
+    top = alerts[0]["evidence"][0]
+    assert (top["signal"], top["value"], top["median"]) == ("self_ms", 300.0, 10.0)
+    assert top["z"] == 290.0  # scale is the 1 ms floor: history is perfectly flat
+
+
+def test_anomalies_persistence_waits_for_three_windows():
+    c, store = client(now_s=1000)
+    _steady_then_slow(store)
+    alerts = c.get("/anomalies", params={"detector": "persistence", "start_s": 0, "end_s": 130}).json()
+    assert [a["window_start_s"] for a in alerts] == [120]
+    assert alerts[0]["detector"] == "persistence"
+
+
+def test_anomalies_uses_history_before_the_requested_range():
+    c, store = client(now_s=1000)
+    _steady_then_slow(store)
+    # Only ask about windows 110-129; the baseline must still come from windows 0-9.
+    alerts = c.get("/anomalies", params={"detector": "threshold", "start_s": 110, "end_s": 130}).json()
+    assert [a["window_start_s"] for a in alerts] == [110, 120]
+
+
+def test_unknown_detector_is_rejected():
+    c, _ = client()
+    assert c.get("/anomalies", params={"detector": "magic"}).status_code == 422
