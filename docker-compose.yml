@@ -58,6 +58,8 @@ services:
       OTEL_SERVICE_NAME: orders
       INVENTORY_URL: http://inventory:8080
       PAYMENTS_URL: http://payments:8080
+    ports:
+      - "8081:8080"   # host access for the fault injector (/admin/fault)
     depends_on:
       collector: { condition: service_started }
       inventory: { condition: service_started }
@@ -69,6 +71,8 @@ services:
     environment:
       <<: [*otel-env, *db-env]
       OTEL_SERVICE_NAME: inventory
+    ports:
+      - "8082:8080"   # host access for the fault injector (/admin/fault)
     depends_on:
       collector: { condition: service_started }
       postgres: { condition: service_healthy }
@@ -78,6 +82,8 @@ services:
     environment:
       <<: [*otel-env, *db-env]
       OTEL_SERVICE_NAME: payments
+    ports:
+      - "8083:8080"   # host access for the fault injector (/admin/fault)
     depends_on:
       collector: { condition: service_started }
       postgres: { condition: service_healthy }
