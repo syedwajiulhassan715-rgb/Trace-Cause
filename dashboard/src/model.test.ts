@@ -81,3 +81,12 @@ describe("explain", () => {
     expect(explain({ detector: "persistence", incident_windows_s: [], ranking: [] }, alerts)).toBeNull();
   });
 });
+
+describe("segments", () => {
+  it("splits a series where windows are missing", async () => {
+    const { segments } = await import("./model");
+    expect(segments([{ t: 0, v: 1 }, { t: 10, v: 2 }, { t: 40, v: 3 }, { t: 50, v: 4 }]))
+      .toEqual([[{ t: 0, v: 1 }, { t: 10, v: 2 }], [{ t: 40, v: 3 }, { t: 50, v: 4 }]]);
+    expect(segments([])).toEqual([]);
+  });
+});

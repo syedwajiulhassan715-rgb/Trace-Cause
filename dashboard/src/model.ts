@@ -66,6 +66,17 @@ export function series(buckets: Bucket[], service: string, signal: SignalKey): P
     .map((b) => ({ t: b.window_start_s, v: valueOf(b, signal) }));
 }
 
+/** Split where windows are missing (no traffic, analyzer restart), so the line does not bridge the gap. */
+export function segments(points: Point[], windowS = 10): Point[][] {
+  const out: Point[][] = [];
+  for (const p of points) {
+    const last = out.at(-1);
+    if (last && p.t - last[last.length - 1].t <= windowS) last.push(p);
+    else out.push([p]);
+  }
+  return out;
+}
+
 export function alertWindows(alerts: Alert[], service: string): Set<number> {
   return new Set(alerts.filter((a) => a.service === service).map((a) => a.window_start_s).sort((a, b) => a - b));
 }
@@ -105,6 +116,6 @@ export function explain(rc: RootCause, alerts: Alert[]): string | null {
   if (!evidence) return `${top.service} is the most likely cause (${name}, score ${top.score}), ${windows}.`;
   return (
     `${top.service} is the most likely cause: ${name} ${formatValue(top.signal, evidence.value)} ` +
-    `against a baseline of ${formatValue(top.signal, evidence.median)} (z = ${evidence.z}), ${windows}.`
+    `against a baseline of ${formatValue(top.signal, evidence.median)} (z = ${evidence.z.toFixed(1)}), ${windows}.`
   );
 }

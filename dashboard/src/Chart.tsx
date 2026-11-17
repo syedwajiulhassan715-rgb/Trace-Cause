@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { formatTime, niceMax, type Point, type SignalKey } from "./model";
+import { formatTime, niceMax, type Point, segments, type SignalKey } from "./model";
 
 const W = 320;
 const H = 112;
@@ -30,11 +30,15 @@ export function Chart({ title, signal, points, alerts, domain }: Props) {
   const yMax = niceMax(Math.max(0, ...points.map((p) => p.v)));
   const x = (t: number) => PAD.left + ((t - t0) / Math.max(1, t1 - t0)) * (W - PAD.left - PAD.right);
   const y = (v: number) => PAD.top + (1 - v / yMax) * (H - PAD.top - PAD.bottom);
-  // Plot each window at its middle.
-  const xy = points.map((p) => [x(p.t + WINDOW_S / 2), y(p.v)] as const);
-  const line = xy.map(([px, py], i) => `${i ? "L" : "M"}${px.toFixed(1)},${py.toFixed(1)}`).join("");
+  // Plot each window at its middle; missing windows break the line.
   const base = y(0);
-  const area = xy.length ? `${line}L${xy[xy.length - 1][0].toFixed(1)},${base}L${xy[0][0].toFixed(1)},${base}Z` : "";
+  const parts = segments(points, WINDOW_S).map((seg) => {
+    const xy = seg.map((p) => [x(p.t + WINDOW_S / 2), y(p.v)] as const);
+    const d = xy.map(([px, py], i) => `${i ? "L" : "M"}${px.toFixed(1)},${py.toFixed(1)}`).join("");
+    return { line: d, area: `${d}L${xy[xy.length - 1][0].toFixed(1)},${base}L${xy[0][0].toFixed(1)},${base}Z` };
+  });
+  const line = parts.map((p) => p.line).join("");
+  const area = parts.map((p) => p.area).join("");
   const alertCount = [...alerts].filter((t) => t >= t0 && t < t1).length;
 
   function onMove(e: React.PointerEvent<SVGSVGElement>) {
