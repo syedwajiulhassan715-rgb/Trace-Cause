@@ -50,6 +50,12 @@ python -m loadgen.faults clear                               # ...and remove it
 The compose file has local-only default credentials. To override them, copy
 `.env.example` to `.env`.
 
+![Dashboard: root-cause ranking for the latest incident, and own-code time, database time and own errors per service with alert windows shaded](docs/dashboard.png)
+
+*The dashboard after a 60 ms slow-query fault in inventory: only inventory's
+database time rises, and it ranks first. The breaks in the lines are minutes
+without traffic.*
+
 ## How it works
 
 ```
