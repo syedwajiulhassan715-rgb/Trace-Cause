@@ -19,6 +19,7 @@ import statistics
 from collections import defaultdict
 from dataclasses import dataclass
 
+from .buckets import WINDOW_NS
 from .detect import Score
 from .otlp import Span
 
@@ -63,6 +64,24 @@ def depths(edges: set[tuple[str, str]]) -> dict[str, int]:
     for s in services:  # unreachable members of a cycle
         depth.setdefault(s, 0)
     return depth
+
+
+def incidents(alert_windows: set[int], max_gap_windows: int = 3) -> list[set[int]]:
+    """Split alert windows into incidents, oldest first.
+
+    Up to `max_gap_windows` quiet windows (30 s by default) inside an incident
+    are allowed, since a detector can flicker; a longer quiet period starts a new
+    incident. Without this, two unrelated faults in one time range would be
+    ranked as one.
+    """
+    out: list[set[int]] = []
+    prev = None
+    for w in sorted(alert_windows):
+        if prev is None or (w - prev) // WINDOW_NS - 1 > max_gap_windows:
+            out.append(set())
+        out[-1].add(w)
+        prev = w
+    return out
 
 
 def rank(scores: list[Score], incident_windows: set[int], edges: set[tuple[str, str]]) -> list[Candidate]:

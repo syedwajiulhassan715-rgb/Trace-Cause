@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from .buckets import WINDOW_NS, Bucket, bucketize, window_start
 from .detect import PersistenceDetector, ThresholdDetector, score_series
 from .otlp import parse_export
-from .rank import call_graph, rank
+from .rank import call_graph, incidents, rank
 from .store import SpanStore
 
 S = 1_000_000_000
@@ -94,10 +94,13 @@ def create_app(store: SpanStore, clock_ns=time.time_ns) -> FastAPI:
         now = clock_ns()
         start, end = window_range(start_s, end_s, now)
         scores, alerts, spans = detect(detector, start, end, now)
-        incident = {a.window_start_ns for a in alerts}
+        # Rank the most recent incident; earlier ones in the range are counted, not mixed in.
+        found = incidents({a.window_start_ns for a in alerts})
+        incident = found[-1] if found else set()
         ranking = rank(scores, incident, call_graph(spans))
         return {
             "detector": detector,
+            "incidents_in_range": len(found),
             "incident_windows_s": sorted(w // S for w in incident),
             "ranking": [{"rank": i + 1, "service": c.service, "score": c.score, "signal": c.signal,
                          "depth": c.depth} for i, c in enumerate(ranking)],

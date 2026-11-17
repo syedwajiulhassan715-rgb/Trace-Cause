@@ -146,4 +146,22 @@ def test_rootcause_without_incident_is_empty():
     c, _ = client()
     c.post("/v1/traces", json=payload())
     assert c.get("/rootcause", params={"start_s": 0, "end_s": 60}).json() == {
-        "detector": "persistence", "incident_windows_s": [], "ranking": []}
+        "detector": "persistence", "incidents_in_range": 0, "incident_windows_s": [], "ranking": []}
+
+
+def test_rootcause_ranks_only_the_latest_incident():
+    from tracecause.otlp import Span
+    c, store = client(now_s=2000)
+    spans = []
+    for w in range(40):
+        for i in range(6):
+            start = w * 10 * S + i * S
+            inv = 300 if 10 <= w < 13 else 10   # first incident: inventory
+            pay = 300 if 30 <= w < 33 else 10   # later incident: payments
+            spans.append(Span("i%d_%d" % (w, i), "s", None, "inventory", "POST", "SERVER", start, start + inv * MS, False, "/r", False))
+            spans.append(Span("p%d_%d" % (w, i), "s", None, "payments", "POST", "SERVER", start, start + pay * MS, False, "/c", False))
+    store.add(spans)
+    r = c.get("/rootcause", params={"detector": "threshold", "start_s": 0, "end_s": 400}).json()
+    assert r["incident_windows_s"] == [300, 310, 320]
+    assert r["incidents_in_range"] == 2
+    assert r["ranking"][0]["service"] == "payments"

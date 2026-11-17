@@ -78,3 +78,11 @@ def test_tie_goes_to_the_more_downstream_service():
 
 def test_no_incident_means_no_ranking():
     assert rank([z("orders", 1, "self_ms", 5.0)], set(), EDGES) == []
+
+
+def test_incidents_split_on_gaps_longer_than_the_allowed_quiet_time():
+    from tracecause.rank import incidents
+    # windows 1,2,3 then quiet for 3 windows (40-60 s), then 7,9 (one quiet window: same incident)
+    got = incidents({1 * W, 2 * W, 3 * W, 7 * W, 9 * W}, max_gap_windows=2)
+    assert got == [{1 * W, 2 * W, 3 * W}, {7 * W, 9 * W}]
+    assert incidents(set(), max_gap_windows=2) == []
