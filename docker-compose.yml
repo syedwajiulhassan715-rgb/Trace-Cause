@@ -40,6 +40,13 @@ services:
     volumes:
       - analyzer-data:/data
 
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "3000:80"
+    depends_on:
+      - analyzer
+
   collector:
     image: otel/opentelemetry-collector:0.163.1
     command: ["--config=/etc/otelcol/tracecause.yaml"]
