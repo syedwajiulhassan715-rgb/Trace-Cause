@@ -71,7 +71,13 @@ export function App() {
       {error && <p className="banner" role="alert">Cannot reach the analyzer: {error}</p>}
 
       <section className="card" aria-labelledby="rc-title">
-        <h2 id="rc-title">Root cause</h2>
+        <h2 id="rc-title">
+          Root cause
+          {data && (data.rootcause.incidents_in_range ?? 0) > 1 && (
+            <span className="muted"> · latest of {data.rootcause.incidents_in_range} incidents in range,{" "}
+              {formatTime(data.rootcause.incident_windows_s[0])}–{formatTime(data.rootcause.incident_windows_s.at(-1)! + 10)}</span>
+          )}
+        </h2>
         {!data ? <p className="muted">Loadingâ€¦</p>
           : data.rootcause.ranking.length === 0 ? <p className="muted">No incident in the last 15 minutes.</p>
           : (

@@ -14,7 +14,7 @@ it("shows the ranking and an explanation from the analyzer's numbers", async () 
     "/api/buckets": [bucket("payments", now - 60, 3), bucket("payments", now - 50, 300), bucket("orders", now - 60, 2)],
     "/api/anomalies": [{ service: "payments", window_start_s: now - 50, detector: "persistence",
       evidence: [{ signal: "db_ms", value: 300, median: 3, scale: 1, z: 297 }] }],
-    "/api/rootcause": { detector: "persistence", incident_windows_s: [now - 50], ranking: [
+    "/api/rootcause": { detector: "persistence", incidents_in_range: 2, incident_windows_s: [now - 50], ranking: [
       { rank: 1, service: "payments", score: 297, signal: "db_ms", depth: 2 },
       { rank: 2, service: "orders", score: 0, signal: "self_ms", depth: 1 }] },
   };
@@ -29,4 +29,5 @@ it("shows the ranking and an explanation from the analyzer's numbers", async () 
   const rows = screen.getAllByRole("row").map((r) => r.textContent);
   expect(rows).toContain("1payments297.0Database time (p50)2");
   expect(screen.getAllByText("1 alert window").length).toBe(1);
+  expect(screen.getByText(/latest of 2 incidents in range/)).toBeTruthy();
 });

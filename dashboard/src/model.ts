@@ -21,7 +21,12 @@ export type Bucket = {
 export type Evidence = { signal: string; value: number; median: number; scale: number; z: number };
 export type Alert = { service: string; window_start_s: number; detector: string; evidence: Evidence[] };
 export type Ranked = { rank: number; service: string; score: number; signal: string; depth: number };
-export type RootCause = { detector: string; incident_windows_s: number[]; ranking: Ranked[] };
+export type RootCause = {
+  detector: string;
+  incidents_in_range?: number;
+  incident_windows_s: number[];
+  ranking: Ranked[];
+};
 export type Detector = "threshold" | "persistence";
 
 export type SignalKey = "self_ms" | "db_ms" | "own_error_rate";
