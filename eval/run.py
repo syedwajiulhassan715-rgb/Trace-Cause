@@ -82,7 +82,7 @@ def record(name: str):
     (DATA / f"{name}.timeline.json").write_text(json.dumps({
         "set": name, "seed": seed, "rate": RATE, "started_s": round(t0, 3),
         "ended_s": round(t0 + duration, 3), "load": summary, "segments": timeline,
-    }, indent=2))
+    }, indent=2), encoding="utf-8")
     print(f"[{name}] done: {db} ({db.stat().st_size // 1_000_000} MB), load {summary}", flush=True)
 
 

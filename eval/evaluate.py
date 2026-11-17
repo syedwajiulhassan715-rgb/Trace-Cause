@@ -49,7 +49,7 @@ def params(det) -> str:
 class Recording:
     def __init__(self, name: str):
         self.name = name
-        self.timeline = json.loads((DATA / f"{name}.timeline.json").read_text())
+        self.timeline = json.loads((DATA / f"{name}.timeline.json").read_text(encoding="utf-8"))
         store = SpanStore(str(DATA / f"{name}.db"))
         t0, t1 = self.timeline["started_s"], self.timeline["ended_s"]
         spans = store.spans_between(int((t0 - 60) * S), int((t1 + 120) * S))
@@ -110,7 +110,7 @@ def write_readme_results(chosen, held, raw, heldout: Recording):
     """Replace the README's RESULTS block, so its numbers always come from this run."""
     readme = HERE.parent / "README.md"
     start, end = "<!-- RESULTS:START -->", "<!-- RESULTS:END -->"
-    text = readme.read_text()
+    text = readme.read_text(encoding="utf-8")
     if start not in text or end not in text:
         return
     t = heldout.timeline
@@ -139,7 +139,7 @@ def write_readme_results(chosen, held, raw, heldout: Recording):
     block.append(end)
     before, rest = text.split(start, 1)
     after = rest.split(end, 1)[1]
-    readme.write_text(before + "\n".join(block) + after)
+    readme.write_text(before + "\n".join(block) + after, encoding="utf-8")
 
 
 def main():
@@ -191,15 +191,15 @@ def main():
     for f in GRID:
         lines += [row(f, d, r) for d, r in grids[f]]
 
-    (HERE / "results.md").write_text("\n".join(lines) + "\n")
+    (HERE / "results.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     write_readme_results(chosen, held, raw, heldout)
     (HERE / "results.json").write_text(json.dumps({
         "chosen": {f: params(d) for f, d in chosen.items()},
         "heldout": {f: asdict(r) for f, r in held.items()},
         "heldout_ablation_raw_signals": {f: asdict(r) for f, r in raw.items()},
         "tuning": {f: asdict(r) for f, r in tuned.items()},
-    }, indent=2))
-    print((HERE / "results.md").read_text())
+    }, indent=2), encoding="utf-8")
+    print((HERE / "results.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
